@@ -1,7 +1,7 @@
+numpy==1.24.3
+pandas-ta==0.3.14b0
+pandas
 yfinance
 ccxt
-pandas
-pandas_ta
-numpy
 scikit-learn
 streamlit
