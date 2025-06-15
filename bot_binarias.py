@@ -23,22 +23,30 @@ def get_stock_data(symbol, period='365d'):
 
 def get_crypto_data(symbol, exchange='binance', timeframe='1d', limit=365):
     ex = getattr(ccxt, exchange)()
-    ohlcv = ex.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
-    df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-    df.set_index('timestamp', inplace=True)
-    df.columns = [col.lower() for col in df.columns]
-    return df
+    try:
+        ohlcv = ex.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
+        df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        df.set_index('timestamp', inplace=True)
+        df.columns = [col.lower() for col in df.columns]
+        return df
+    except Exception as e:
+        st.warning(f"Error fetching crypto data for {symbol}: {e}")
+        return pd.DataFrame()  # Devuelve DataFrame vacío si falla
 
 def add_technical_indicators(df):
     df = df.copy()
     if 'close' not in df.columns:
         st.error("ERROR: DataFrame no tiene columna 'close', no se pueden calcular indicadores.")
-        return df
-    df['rsi'] = ta.rsi(df['close'], length=14)
-    df['sma50'] = ta.sma(df['close'], length=50)
-    df['target'] = (df['close'].shift(-1) > df['close']).astype(int)
-    df.dropna(inplace=True)
+        return pd.DataFrame()  # Devuelve vacío para evitar errores más adelante
+    try:
+        df['rsi'] = ta.rsi(df['close'], length=14)
+        df['sma50'] = ta.sma(df['close'], length=50)
+        df['target'] = (df['close'].shift(-1) > df['close']).astype(int)
+        df.dropna(inplace=True)
+    except Exception as e:
+        st.error(f"Error al calcular indicadores técnicos: {e}")
+        return pd.DataFrame()
     return df
 
 def prepare_data(df):
@@ -58,6 +66,9 @@ def train_and_predict(features, target):
 
 def mostrar_resumen(sym, df):
     try:
+        if df.empty:
+            st.info(f"No hay datos procesables para {sym}")
+            return
         X, y = prepare_data(df)
         model, accuracy = train_and_predict(X, y)
         last_row = df.iloc[-1]
@@ -114,7 +125,6 @@ def main():
     crypto_symbols = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'ARB/USDT']
     stock_symbols = ['AAPL', 'TSLA', 'MSFT', 'NVDA']
 
-    # Inicializamos variables de estado para guardar datos y tiempo
     if "data" not in st.session_state:
         st.session_state.data = {}
     if "last_update_time" not in st.session_state:
@@ -125,34 +135,34 @@ def main():
         with st.spinner("📥 Descargando y procesando datos..."):
             for sym in forex_symbols:
                 df = get_forex_data(sym)
+                st.write(f"Forex {sym} columnas: {df.columns.tolist()}")
+                st.write(df.head())
                 df = add_technical_indicators(df)
                 data[sym] = df
 
             for sym in crypto_symbols:
-                try:
-                    df = get_crypto_data(sym)
-                    df = add_technical_indicators(df)
-                    data[sym] = df
-                except Exception as e:
-                    st.warning(f"Error descargando {sym}: {e}")
+                df = get_crypto_data(sym)
+                st.write(f"Crypto {sym} columnas: {df.columns.tolist()}")
+                st.write(df.head())
+                df = add_technical_indicators(df)
+                data[sym] = df
 
             for sym in stock_symbols:
                 df = get_stock_data(sym)
+                st.write(f"Stock {sym} columnas: {df.columns.tolist()}")
+                st.write(df.head())
                 df = add_technical_indicators(df)
                 data[sym] = df
 
         st.session_state.data = data
         st.session_state.last_update_time = datetime.datetime.now()
 
-    # Botón para actualizar datos
     if st.button("🔄 Actualizar datos ahora"):
         cargar_datos()
 
-    # Si no hay datos cargados, los carga al inicio
     if not st.session_state.data:
         cargar_datos()
 
-    # Mostrar info de última actualización y tiempo transcurrido
     if st.session_state.last_update_time is not None:
         tiempo_transcurrido = datetime.datetime.now() - st.session_state.last_update_time
         minutos = int(tiempo_transcurrido.total_seconds() // 60)
