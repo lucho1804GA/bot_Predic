@@ -32,13 +32,13 @@ def get_crypto_data(symbol, exchange='binance', timeframe='1d', limit=365):
         return df
     except Exception as e:
         st.warning(f"Error fetching crypto data for {symbol}: {e}")
-        return pd.DataFrame()  # Devuelve DataFrame vacío si falla
+        return pd.DataFrame()
 
 def add_technical_indicators(df):
     df = df.copy()
     if 'close' not in df.columns:
         st.error("ERROR: DataFrame no tiene columna 'close', no se pueden calcular indicadores.")
-        return pd.DataFrame()  # Devuelve vacío para evitar errores más adelante
+        return pd.DataFrame()
     try:
         df['rsi'] = ta.rsi(df['close'], length=14)
         df['sma50'] = ta.sma(df['close'], length=50)
@@ -66,13 +66,20 @@ def train_and_predict(features, target):
 
 def mostrar_resumen(sym, df):
     try:
-        if df.empty:
-            st.info(f"No hay datos procesables para {sym}")
+        if df.empty or len(df) < 60:
+            st.info(f"No hay datos suficientes para {sym}")
             return
+
         X, y = prepare_data(df)
+        if X.empty or y.empty:
+            st.info(f"No hay datos de características o etiquetas para {sym}")
+            return
+
         model, accuracy = train_and_predict(X, y)
+
         last_row = df.iloc[-1]
         last_features = pd.DataFrame([last_row[['close', 'rsi', 'sma50']].values], columns=['close', 'rsi', 'sma50'])
+
         pred_proba = model.predict_proba(last_features)[0,1]
         rsi_val = last_row['rsi']
         sma50_val = last_row['sma50']
@@ -103,8 +110,7 @@ def mostrar_resumen(sym, df):
             st.write(f"🧠 Última predicción: {'Sube 📈' if last_row['target'] == 1 else 'Baja 📉'}")
             st.write(f"📉 Riesgo sugerido: SL=2%, TP=4%")
 
-            st.write("💰 Simulador de Ganancia")
-            monto = st.number_input(f"Ingresar monto para operar en {sym}", value=10.0, step=1.0, key=sym)
+            monto = st.number_input(f"Ingresar monto para operar en {sym}", value=10.0, step=1.0, key=f"monto_{sym}")
             posible_ganancia = monto * 0.7
             st.success(f"Si aciertas: ganas ${posible_ganancia:.2f}")
 
@@ -135,22 +141,16 @@ def main():
         with st.spinner("📥 Descargando y procesando datos..."):
             for sym in forex_symbols:
                 df = get_forex_data(sym)
-                st.write(f"Forex {sym} columnas: {df.columns.tolist()}")
-                st.write(df.head())
                 df = add_technical_indicators(df)
                 data[sym] = df
 
             for sym in crypto_symbols:
                 df = get_crypto_data(sym)
-                st.write(f"Crypto {sym} columnas: {df.columns.tolist()}")
-                st.write(df.head())
                 df = add_technical_indicators(df)
                 data[sym] = df
 
             for sym in stock_symbols:
                 df = get_stock_data(sym)
-                st.write(f"Stock {sym} columnas: {df.columns.tolist()}")
-                st.write(df.head())
                 df = add_technical_indicators(df)
                 data[sym] = df
 
