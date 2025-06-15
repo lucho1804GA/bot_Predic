@@ -1,0 +1,7 @@
+yfinance
+ccxt
+pandas
+pandas_ta
+numpy
+scikit-learn
+streamlit
